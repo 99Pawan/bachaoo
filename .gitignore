@@ -32,6 +32,8 @@ yarn-debug.*
 yarn-error.*
 
 # OS
-.DS_Store
-Thumbs.db
+# Queries & Scratch
+query.txt
+query,txt
+*query*
 

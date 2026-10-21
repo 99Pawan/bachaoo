@@ -56,43 +56,54 @@ flowchart TD
 
 ---
 
-### 3.2. Bucket Architecture, Action Rules & Bill Tracking
+### 3.2. Simple Envelopes
+All envelopes are identical virtual balances. An envelope has a name, current balance, color/icon, optional description, and optional monthly allocation. Names such as `Rent`, `iPhone`, `Home Repair`, or `Food` are labels chosen by the user, not behavior types.
 
-#### A. Strict Conservation Invariant
-$$\text{Net Worth (Real Bank Balance)} = \sum_{i} \text{Bucket Balance}_i$$
-If an unmonitored external transaction reduces the bank balance such that $\text{Net Worth} < \sum \text{Bucket Balance}$, an immediate modal/push alert triggers:
-> *"Discrepancy of ₹X detected outside Bachaoo. Select a bucket to deduct from, or it will auto-deduct from `Savings`."*
+One optional envelope can be selected as the **daily spending envelope**. Only that envelope participates in daily pacing and overspend friction. Spending from any other envelope deducts directly from its balance and does not affect the daily allowance.
 
-#### B. The 4 Core Bucket Archetypes
-Every bucket follows a clear role and automated action rule:
-
-1. **Fixed Obligation / Bill (e.g., `Rent`, `Mess Fee`, `Electricity`):**
-   * **Rule:** Auto-allocate fixed amount (e.g., ₹20,000) from Net Worth on a set cycle date.
-   * **Lifecycle Status:** `Funded` $\to$ `Due` $\to$ `Paid`.
-   * **Underfunded Warning:** If the due date is approaching and the bucket balance is lower than the required bill (or if money was cannibalized), the app highlights the card in amber/red: *"Rent of ₹20k due in 3 days — bucket is underfunded by ₹5k!"*
-   * **Spend Lock:** Money in this bucket is shielded from daily discretionary spending unless explicitly unlocked by the user.
-
-2. **Goal Accumulator (e.g., `iPhone`, `Goa Trip`):**
-   * **Rule:** Auto-transfer fixed target (e.g., ₹10,000 monthly) from Net Worth.
-   * **Behavior:** Compounds month-over-month towards a target milestone.
-
-3. **Active Spending Pool / Allowance (e.g., `Daily / Monthly Allowance`):**
-   * **Rule:** Auto-funded monthly (e.g., ₹10,000).
-   * **Behavior:** Feeds the Dynamic Daily Pacer ($\text{Remaining} \div \text{Days Left}$).
-
-4. **Residual / Sink Bucket (e.g., `Savings / Safe Buffer`):**
-   * **Rule (Month-End Sweep):** At the end of the month, any unspent residue across discretionary buckets automatically sweeps into `Savings`.
-   * **Buffer Role:** Acts as the primary shock-absorber for unexpected external bank debits.
+The app does not judge whether an envelope is sufficiently funded, enforce bill due dates, track savings targets, or apply hardcoded priority rules. A low balance is simply displayed for the user to decide how to handle.
 
 ---
 
-### 3.3. Dynamic Daily Pacer Engine & Calendar
-* **Dynamic Recalibration Formula:**
-  $$\text{Today's Allowance} = \frac{\text{Remaining Discretionary Pool}}{\text{Days Remaining in Cycle}}$$
-* **Rolling Rollover vs Borrowing:**
-  * **Under-spending (Savings Win):** If you only spend ₹150 of your ₹333 allowance today, the remaining ₹183 naturally rolls over, slightly boosting future daily allowances or being swept into the Safe Buffer.
-  * **Over-spending (Borrowing):** If you spend ₹450, future daily allowances seamlessly recalibrate downward (e.g., ₹315/day), making the consequence instant and automatic.
-* **Interactive Calendar View:** Displays past performance (green = within daily allowance, red = overspent) and future projected daily allowances.
+### 3.3. Daily Allowance Engine, Weekend Weighting & Calendar
+
+#### A. Custom Distribution (Weekend Weighting)
+Instead of flat division ($\text{Pool} \div \text{Days}$), users can configure custom weighting:
+* **Weekday / Weekend Split:** e.g., Weekdays ₹250/day, Friday–Sunday ₹550/day.
+* **Interactive Calendar:** Pre-renders projected allowances for every future day of the month based on active weights.
+
+#### B. Dual Borrow Mechanics & Upfront Batch Spend Pattern
+When spending exceeds today's remaining allowance, the user has two distinct borrow choices:
+1. **Mode 1 — Advance from Upcoming Days (Sequential Future Drawdown):**
+   * Instead of restricting to a single day, the user can advance across multiple upcoming consecutive days (e.g., Day +1, Day +2, Day +3) down to ₹0.
+   * **Upfront Batch Purchase Use Case:** Supports planned bulk expenses (e.g., weekly supplies/rations or monthly bus pass, setting the next several days' allowance to ₹0 because those days require no spending).
+   * **Psychological Guardrail:** Waking up to **₹0 allowance** on subsequent days serves as a powerful friction reminder against unnecessary impulse spending.
+   * **Ceiling Constraint:** Permitted as long as the parent allowance bucket balance $\ge$ total transaction amount.
+2. **Mode 2 — On-Demand User Normalization ("Smooth the Curve"):**
+   * Normalization is **strictly user-empowered**, never forced by the system.
+   * If a user with several ₹0 days decides they need liquid daily budget, they can tap a 1-click **"Normalize Remaining Days"** button on the hero dashboard or inside the calendar to re-spread whatever remains in the parent pool evenly across the cycle.
+3. **1-Minute Ephemeral Undo Window:**
+   * Any borrow or normalization action displays a 60-second floating snackbar/toast to immediately revert accidental taps without database history overhead.
+
+---
+
+### 3.4. The Dedicated Discrepancy Resolution Hub
+Triggered on-demand via the **"Sync Balance"** button near Net Worth, or automatically on delta detection:
+
+#### A. Negative Discrepancy ($\text{Synced Balance} < \text{Tracked Net Worth}$)
+* **Interactive Splitting Interface:** If ₹5,000 is missing, the user is presented with a resolution card allowing itemized allocation (e.g., ₹2,000 from Daily Allowance [with normalize toggle], ₹1,000 from General Savings, ₹2,000 from iPhone Goal).
+* **Automatic Fallback Cascade:** If ignored or unassigned:
+  1. Deduct first from `General Savings`.
+  2. If exhausted, deduct from `Allowance`.
+  3. If exhausted, deduct from `Savings Goals`.
+  4. Deduct from `Fixed Payments` only as the final critical resort.
+
+#### B. Positive Discrepancy ($\text{Synced Balance} > \text{Tracked Net Worth}$)
+* **Surplus Allocation Interface:** If +₹10,000 is detected (bonus, refund, gift):
+  * Top-up an underfunded `Fixed Payments` bucket (or overfill it).
+  * Direct to a specific `Savings Goal`.
+  * Add to `Allowance` (either flat custom boost or normalize across remaining days).
+  * Default destination if unassigned: **`General Savings`**.
 
 ---
 
@@ -120,17 +131,37 @@ When a transaction exceeds today's remaining allowance (e.g., spending ₹400 wh
 
 ---
 
-### 3.7. The "Liquidity Waterfall" Cascade (Deficit Absorption Engine)
-When an unmonitored outside spend occurs and balance discrepancies ($\Delta$) are detected:
+### 3.7. The "Liquidity Waterfall" Cascade & Bidirectional Delta Reconciliation
+Discrepancies between the tracked virtual state and real bank accounts can be **negative** (unmonitored spends) or **positive** (silent refunds/credits).
+
+#### A. Negative Discrepancy (Ghost Debits / Missed Spends)
+When money leaves the bank without a detected SMS/notification:
 1. **User Prompt Grace Period:** A notification alerts the user: *"₹X detected outside our scope. Tap to assign to a bucket, or it will be auto-settled."*
 2. **Waterfall Auto-Deduction Hierarchy:** If unassigned, the system executes a priority cascade:
-   * **Stage 1 (Primary Buffer):** Deduct from `savings_root` (the unallocated root residual).
-   * **Stage 2 (Discretionary Allowance):** If `savings_root` is exhausted, deduct from `daily_allowance` and `allowance`.
-   * **Stage 3 (Bucket Priority / Descending Waterfall):** If deficit remains, deduct in descending order of bucket balance while respecting user-assigned bucket priorities (protecting high-priority goals like `Saving for iPhone` until the very last resort).
+   * **Stage 1 (Primary Buffer):** Deduct from `savings_root` / `Safe Buffer`.
+   * **Stage 2 (Discretionary Allowance):** If buffer is exhausted, deduct from `daily_allowance` and `spending_pool`.
+   * **Stage 3 (Bucket Priority):** If deficit remains, deduct in descending order of bucket balance while protecting high-priority goals (`Saving for iPhone`) until the very last resort.
+
+#### B. Positive Discrepancy (Ghost Credits / Silent Refunds)
+When money enters the bank silently (e.g., e-commerce refund from Flipkart/Amazon, peer UPI repayment, interest credit):
+1. **Delta Detection:** $\text{Real Bank Balance} > \sum \text{Bucket Balances}$.
+2. **User Allocation Prompt:** *"Found an untracked +₹X credit (Refund or Transfer). Where should this go?"*
+3. **Default Inflow Sink:** If unassigned, auto-credits into **`Safe Buffer / Savings`** so discretionary daily allowance is not artificially inflated without user consent.
 
 ---
 
-### 3.8. Root Node Synchronization Mechanics (Who Triggers the Update?)
+### 3.8. The "Ghost Transaction" Edge Case (Why SMS Fails in India)
+SMS parsing is inherently non-deterministic in India due to several ecosystem factors:
+* **UPI Lite Transactions:** For micro-spends under ₹500 via on-device UPI Lite wallets, banks do not send individual SMS alerts to prevent telecom congestion.
+* **Silent Inward Refunds:** E-commerce refunds (Flipkart, Swiggy, Zomato, Amazon) frequently arrive via IMPS/NEFT batch credits with no customer-facing SMS alerts.
+* **TRAI DND & DLT Gateway Drops:** Regulatory scrubbing or poor cell reception in campus hostels often causes SMS delivery to drop silently.
+* **Bank Maintenance Windows:** Late-night transactions (12:00 AM – 3:30 AM) during core banking settlement runs often fail to trigger SMS dispatch.
+
+**Solution Architecture:**
+* Rather than trusting SMS as a single point of truth, Bachaoo uses a **Hybrid Multi-Signal Model**:
+  1. **Signal A (Direct App Spends):** 100% deterministic (captured at point of intent).
+  2. **Signal B (Android Notification/SMS Listener):** Catches ~85-90% of external spends.
+  3. **Signal C (Bidirectional Balance Check):** Periodic delta check that catches silent refunds and missed debits without requiring line-by-line bank statements.
 Since Indian commercial banks do not expose open, real-time webhooks or pub-sub directly to third-party apps, synchronization is handled via three complementary layers:
 
 1. **App Lifecycle Triggers (Event-Driven):**
@@ -208,4 +239,7 @@ bachaoo/
 * **Session 6:** Defined bucket archetypes, fixed bill status lifecycle, strict conservation invariant, and selected full-stack technology choices (React Native/Expo TS + Go + PostgreSQL + Local-First SQLite).
 * **Session 7:** Mapped React Native mental model to Vue 3 + TS, verified local development toolchain (Node v24, npm v11, Git), locked modular monorepo structure (`mobile/` + `backend/`).
 * **Session 8 (MVP Core Built):** Scaffolded Expo TypeScript app in `mobile/`. Implemented Zustand `useBudgetStore`, dynamic daily pacer engine, `AllowanceHeroCard`, `BucketCard`, `SpendModal` friction & consequence engine (Borrow from tomorrow / Pull from buffer), external debit reconciler, and verified 100% clean TypeScript compilation.
-
+* **Session 9:** Documented zero-custody UPI intent payment architecture, analyzed "Ghost Transactions" (missed bank SMS, UPI Lite, silent Flipkart/Amazon refunds), and designed Bidirectional Delta Reconciliation (handling both unmonitored debits and untracked refund credits).
+* **Session 10:** Built multi-bucket discrepancy resolution engine (`DiscrepancyResolutionSection`) with custom per-bucket adjustment inputs, `+Fill` helper, and auto-waterfall cascade.
+* **Session 11 (UI Decluttering & Smart Calendar):** Cleaned up dashboard: removed persistent day cards and simulation bar from primary view. Created dedicated on-demand `AllowanceCalendarModal` (Daily, Weekly, and Monthly cycle pacing tabs). Implemented automatic next-day calendar progression based on local date, and isolated timeline & debit simulation into a discrete `DeveloperOptionsModal`. Refined borrow copy to "Advance from Upcoming Days" (Upfront Batch Spend pattern).
+* **Session 12 (Envelope Simplification):** Removed fixed-bill, goal, buffer, and allowance envelope types. All envelopes now share the same balance model, with monthly allocation retained. Users may optionally designate one envelope as the daily spending envelope; discrepancy settlement requires explicit envelope selection without a hardcoded waterfall.

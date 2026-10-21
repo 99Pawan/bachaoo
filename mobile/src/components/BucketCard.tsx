@@ -2,14 +2,20 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors } from '../theme/colors';
 import { Bucket } from '../types';
-import { Coffee, Home, Smartphone, ShieldCheck, AlertCircle } from 'lucide-react-native';
+import {
+  Coffee,
+  CreditCard,
+  Home,
+  ShieldCheck,
+  Smartphone,
+  Target,
+} from 'lucide-react-native';
 
 interface BucketCardProps {
   bucket: Bucket;
 }
 
 export const BucketCard: React.FC<BucketCardProps> = ({ bucket }) => {
-  // Select Lucide Icon based on iconName
   const renderIcon = () => {
     const iconProps = { size: 20, color: bucket.color };
     switch (bucket.iconName) {
@@ -19,55 +25,37 @@ export const BucketCard: React.FC<BucketCardProps> = ({ bucket }) => {
         return <Smartphone {...iconProps} />;
       case 'ShieldCheck':
         return <ShieldCheck {...iconProps} />;
+      case 'Target':
+        return <Target {...iconProps} />;
       case 'Coffee':
-      default:
         return <Coffee {...iconProps} />;
+      default:
+        return <CreditCard {...iconProps} />;
     }
   };
 
-  const hasTarget = bucket.targetAmount && bucket.targetAmount > 0;
-  const progressPercent = hasTarget ? Math.min(100, Math.round((bucket.currentBalance / bucket.targetAmount!) * 100)) : 0;
-  const isUnderfunded = bucket.billStatus === 'underfunded';
-
   return (
-    <View style={[styles.card, isUnderfunded && styles.cardUnderfunded]}>
+    <View style={styles.card}>
       <View style={styles.topRow}>
         <View style={styles.leftInfo}>
           <View style={[styles.iconContainer, { backgroundColor: `${bucket.color}20` }]}>
             {renderIcon()}
           </View>
-          <View>
+          <View style={styles.nameContainer}>
             <Text style={styles.bucketName}>{bucket.name}</Text>
-            <Text style={styles.categorySubtext}>
-              {bucket.category === 'fixed_bill' && `Due on ${bucket.dueDate}th`}
-              {bucket.category === 'goal' && `Target: ₹${bucket.targetAmount?.toLocaleString('en-IN')}`}
-              {bucket.category === 'spending_pool' && `Monthly pool`}
-              {bucket.category === 'savings_sink' && `Buffer & Residuals`}
-            </Text>
+            {bucket.description ? (
+              <Text style={styles.description} numberOfLines={1}>{bucket.description}</Text>
+            ) : null}
           </View>
         </View>
 
-        <View style={styles.balanceContainer}>
-          <Text style={styles.balanceText}>₹{bucket.currentBalance.toLocaleString('en-IN')}</Text>
-          {bucket.category === 'fixed_bill' && (
-            <View style={[styles.statusTag, isUnderfunded ? styles.tagDanger : styles.tagSuccess]}>
-              {isUnderfunded && <AlertCircle size={10} color={colors.danger} />}
-              <Text style={[styles.statusTagText, isUnderfunded ? styles.textDanger : styles.textSuccess]}>
-                {isUnderfunded ? 'Underfunded' : 'Funded'}
-              </Text>
-            </View>
-          )}
-        </View>
+        <Text style={styles.balanceText}>₹{bucket.currentBalance.toLocaleString('en-IN')}</Text>
       </View>
 
-      {/* Goal Progress bar */}
-      {hasTarget && bucket.category === 'goal' && (
-        <View style={styles.progressSection}>
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressBar, { width: `${progressPercent}%`, backgroundColor: bucket.color }]} />
-          </View>
-          <Text style={styles.progressText}>{progressPercent}% saved</Text>
-        </View>
+      {bucket.monthlyAllocation > 0 && (
+        <Text style={styles.monthlyText}>
+          Monthly allocation: ₹{bucket.monthlyAllocation.toLocaleString('en-IN')}
+        </Text>
       )}
     </View>
   );
@@ -82,10 +70,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.surfaceBorder,
   },
-  cardUnderfunded: {
-    borderColor: colors.danger,
-    backgroundColor: 'rgba(239, 68, 68, 0.05)',
-  },
   topRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -95,6 +79,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    flex: 1,
   },
   iconContainer: {
     width: 42,
@@ -103,70 +88,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  nameContainer: {
+    flex: 1,
+  },
   bucketName: {
     color: colors.textPrimary,
     fontSize: 15,
     fontWeight: '600',
   },
-  categorySubtext: {
+  description: {
     color: colors.textMuted,
     fontSize: 12,
     marginTop: 2,
-  },
-  balanceContainer: {
-    alignItems: 'flex-end',
   },
   balanceText: {
     color: colors.textPrimary,
     fontSize: 16,
     fontWeight: '700',
+    marginLeft: 12,
   },
-  statusTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    marginTop: 4,
-  },
-  tagSuccess: {
-    backgroundColor: colors.primaryMuted,
-  },
-  tagDanger: {
-    backgroundColor: colors.dangerMuted,
-  },
-  statusTagText: {
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  textSuccess: {
-    color: colors.primary,
-  },
-  textDanger: {
-    color: colors.danger,
-  },
-  progressSection: {
-    marginTop: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  progressTrack: {
-    flex: 1,
-    height: 5,
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  progressBar: {
-    height: '100%',
-    borderRadius: 3,
-  },
-  progressText: {
-    color: colors.textSecondary,
+  monthlyText: {
+    color: colors.textMuted,
     fontSize: 11,
-    fontWeight: '500',
+    marginTop: 10,
+    marginLeft: 54,
   },
 });
-

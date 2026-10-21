@@ -1,18 +1,20 @@
-export type BucketCategory = 'fixed_bill' | 'goal' | 'spending_pool' | 'savings_sink';
-
-export type BillStatus = 'funded' | 'due_soon' | 'paid' | 'underfunded';
-
 export interface Bucket {
   id: string;
   name: string;
-  category: BucketCategory;
   currentBalance: number;
-  targetAmount?: number; // E.g., Rent target 20,000, iPhone target 80,000
-  monthlyAllocation: number; // Amount auto-transferred monthly
-  dueDate?: number; // Day of month (1-31) for fixed bills
-  billStatus?: BillStatus;
-  iconName: string; // Lucide icon identifier
+  monthlyAllocation: number;
+  iconName: string;
   color: string;
+  description?: string;
+}
+
+export interface DayAllocation {
+  dayIndex: number; // 0 = today, 1 = tomorrow, 2 = day after, etc.
+  dateStr: string; // "15 Oct", "16 Oct", etc.
+  dayName: string; // "Thu", "Fri", "Sat", etc.
+  allowance: number; // Allowance assigned for this specific day
+  isToday: boolean;
+  isWeekend: boolean;
 }
 
 export interface Transaction {
@@ -21,20 +23,27 @@ export interface Transaction {
   amount: number;
   bucketId: string;
   date: string; // ISO string
-  type: 'expense' | 'allocation' | 'borrow' | 'sweep';
+  type: 'expense' | 'transfer' | 'borrow_advance' | 'borrow_buffer' | 'normalize' | 'sync_adjustment';
   borrowDetails?: {
-    source: 'tomorrow' | 'bucket';
-    fromBucketId?: string;
-    recalibratedDailyAllowance?: number;
+    daysConsumed?: number; // How many future days were drawn down to ₹0
+    sourceBucketId?: string;
   };
   note?: string;
 }
 
-export interface DailyLedger {
-  date: string; // YYYY-MM-DD
-  allowanceGiven: number;
-  actualSpent: number;
-  borrowedAmount: number;
-  isOverspent: boolean;
+export interface UndoSnapshot {
+  id: string;
+  actionDescription: string;
+  timestamp: number; // Date.now()
+  expiresAt: number; // timestamp + 60,000 ms (1 minute)
+  previousBuckets: Bucket[];
+  previousSchedule: DayAllocation[];
+  previousSpentToday: number;
+  previousNetWorth: number;
 }
 
+export interface ActiveDiscrepancy {
+  amount: number; // Discrepancy absolute amount
+  type: 'deficit' | 'surplus'; // deficit: bank < buckets, surplus: bank > buckets
+  timestamp: number;
+}

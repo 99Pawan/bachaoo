@@ -9,7 +9,9 @@ interface TransactionItemProps {
 }
 
 export const TransactionItem: React.FC<TransactionItemProps> = ({ transaction }) => {
-  const isBorrow = transaction.type === 'borrow';
+  const isBorrow = transaction.type === 'borrow_advance' || transaction.type === 'borrow_buffer';
+  const isNormalize = transaction.type === 'normalize';
+  const isSync = transaction.type === 'sync_adjustment';
 
   const formattedDate = new Date(transaction.date).toLocaleTimeString([], {
     hour: '2-digit',
@@ -19,14 +21,22 @@ export const TransactionItem: React.FC<TransactionItemProps> = ({ transaction })
   return (
     <View style={styles.container}>
       <View style={styles.left}>
-        <View style={[styles.iconBox, isBorrow ? styles.borrowIconBox : styles.expenseIconBox]}>
+        <View
+          style={[
+            styles.iconBox,
+            isBorrow && styles.borrowIconBox,
+            isNormalize && { backgroundColor: 'rgba(245, 158, 11, 0.15)' },
+            isSync && { backgroundColor: 'rgba(6, 182, 212, 0.15)' },
+            !isBorrow && !isNormalize && !isSync && styles.expenseIconBox,
+          ]}
+        >
           {isBorrow ? (
             <CornerDownRight size={16} color={colors.warning} />
           ) : (
-            <ArrowUpRight size={16} color={colors.primary} />
+            <ArrowUpRight size={16} color={isSync ? colors.accentCyan : colors.primary} />
           )}
         </View>
-        <View>
+        <View style={{ flex: 1 }}>
           <Text style={styles.title}>{transaction.title}</Text>
           <Text style={styles.subtext}>
             {formattedDate} {transaction.note ? `• ${transaction.note}` : ''}
@@ -35,8 +45,12 @@ export const TransactionItem: React.FC<TransactionItemProps> = ({ transaction })
       </View>
 
       <View style={styles.right}>
-        <Text style={[styles.amount, isBorrow && styles.borrowAmount]}>-₹{transaction.amount}</Text>
-        {isBorrow && <Text style={styles.borrowTag}>BORROWED</Text>}
+        {transaction.amount > 0 ? (
+          <Text style={[styles.amount, isBorrow && styles.borrowAmount]}>-₹{transaction.amount}</Text>
+        ) : (
+          <Text style={[styles.amount, { color: colors.warning }]}>RE-DIVIDED</Text>
+        )}
+        {isBorrow && <Text style={styles.borrowTag}>ADVANCED</Text>}
       </View>
     </View>
   );

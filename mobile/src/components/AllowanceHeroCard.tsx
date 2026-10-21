@@ -1,7 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { colors } from '../theme/colors';
-import { Flame, Calendar, TrendingDown } from 'lucide-react-native';
+import { Flame, Calendar, ChevronRight } from 'lucide-react-native';
 
 interface AllowanceHeroCardProps {
   allowanceToday: number;
@@ -9,6 +9,7 @@ interface AllowanceHeroCardProps {
   remainingToday: number;
   daysRemaining: number;
   totalMonthlyPool: number;
+  onOpenCalendar?: () => void;
 }
 
 export const AllowanceHeroCard: React.FC<AllowanceHeroCardProps> = ({
@@ -17,6 +18,7 @@ export const AllowanceHeroCard: React.FC<AllowanceHeroCardProps> = ({
   remainingToday,
   daysRemaining,
   totalMonthlyPool,
+  onOpenCalendar,
 }) => {
   const percentageSpent = allowanceToday > 0 ? Math.min(100, Math.round((spentToday / allowanceToday) * 100)) : 0;
   const isNearlyDepleted = remainingToday < allowanceToday * 0.2;
@@ -27,13 +29,18 @@ export const AllowanceHeroCard: React.FC<AllowanceHeroCardProps> = ({
       <View style={styles.headerRow}>
         <View style={styles.badge}>
           <Flame size={14} color={colors.primary} />
-          <Text style={styles.badgeText}>Today's Safe-to-Spend</Text>
+          <Text style={styles.badgeText}>Today's Allowance</Text>
         </View>
 
-        <View style={styles.daysBadge}>
-          <Calendar size={13} color={colors.textSecondary} />
+        <Pressable
+          style={styles.daysBadge}
+          onPress={onOpenCalendar}
+          hitSlop={8}
+        >
+          <Calendar size={13} color={colors.accentCyan} />
           <Text style={styles.daysText}>{daysRemaining} days left</Text>
-        </View>
+          <ChevronRight size={13} color={colors.textMuted} />
+        </Pressable>
       </View>
 
       {/* Hero Big Number */}
@@ -121,15 +128,18 @@ const styles = StyleSheet.create({
   daysBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
     backgroundColor: colors.surfaceElevated,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(6, 182, 212, 0.25)',
   },
   daysText: {
-    color: colors.textSecondary,
+    color: colors.textPrimary,
     fontSize: 12,
+    fontWeight: '600',
   },
   amountContainer: {
     alignItems: 'center',

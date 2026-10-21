@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Modal,
+  ScrollView,
   View,
   Text,
   TextInput,
@@ -8,11 +9,10 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  Alert,
 } from 'react-native';
 import { colors } from '../theme/colors';
 import { useBudgetStore } from '../store/useBudgetStore';
-import { X, AlertTriangle, ArrowRight, Shield, Calendar, CheckCircle2 } from 'lucide-react-native';
+import { X, AlertTriangle, ArrowRight, Shield, Calendar, CheckCircle2, FastForward } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
 interface SpendModalProps {
@@ -23,35 +23,42 @@ interface SpendModalProps {
 export const SpendModal: React.FC<SpendModalProps> = ({ visible, onClose }) => {
   const [amountInput, setAmountInput] = useState('');
   const [titleInput, setTitleInput] = useState('');
+  const [selectedBucketId, setSelectedBucketId] = useState('');
 
   const {
     getTodayRemaining,
-    getTodayAllowance,
-    daysRemainingInCycle,
     buckets,
     spendDirect,
-    spendWithBorrowTomorrow,
-    spendWithBorrowBucket,
+    spendBorrowNextAvailable,
+    spendFromBucket,
+    dailyBucketId,
+    previewBorrowDaysImpact,
   } = useBudgetStore();
-
   const remainingToday = getTodayRemaining();
-  const todayAllowance = getTodayAllowance();
-  const spendingPool = buckets.find((b) => b.id === 'spending-pool')?.currentBalance || 0;
-  const safeBuffer = buckets.find((b) => b.id === 'savings-sink')?.currentBalance || 0;
+  const selectedBucket = buckets.find((b) => b.id === selectedBucketId);
+  const isAllowanceSpend = selectedBucketId === dailyBucketId;
 
   const numericAmount = parseFloat(amountInput) || 0;
-  const isOverspend = numericAmount > remainingToday;
+  const isOverspend = isAllowanceSpend && numericAmount > remainingToday;
   const deficit = isOverspend ? numericAmount - remainingToday : 0;
+  const hasInsufficientBucketBalance =
+    !isAllowanceSpend && Boolean(selectedBucket && numericAmount > selectedBucket.currentBalance);
 
-  // Recalibration preview if borrowing from tomorrow
-  const newPoolAfterBorrow = Math.max(0, spendingPool - numericAmount);
-  const recalibratedDailyAllowance =
-    daysRemainingInCycle > 1 ? Math.floor(newPoolAfterBorrow / (daysRemainingInCycle - 1)) : 0;
+  // Preview multi-day drawdown impact
+  const borrowPreview = previewBorrowDaysImpact(numericAmount);
+
+  useEffect(() => {
+    if (visible) {
+      setSelectedBucketId(dailyBucketId || buckets[0]?.id || '');
+    }
+  }, [visible, dailyBucketId, buckets]);
 
   const handleConfirmDirect = () => {
     if (numericAmount <= 0) return;
     const title = titleInput.trim() || 'Quick Expense';
-    const result = spendDirect(numericAmount, title);
+    const result = isAllowanceSpend
+      ? spendDirect(numericAmount, title)
+      : spendFromBucket(selectedBucketId, numericAmount, title);
 
     if (result.success) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -59,23 +66,17 @@ export const SpendModal: React.FC<SpendModalProps> = ({ visible, onClose }) => {
     }
   };
 
-  const handleConfirmBorrowTomorrow = () => {
+  const handleConfirmBorrowNextAvailable = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    const title = titleInput.trim() || 'Impulse Spend (Borrowed from Tomorrow)';
-    spendWithBorrowTomorrow(numericAmount, title);
-    handleClose();
-  };
-
-  const handleConfirmBorrowBuffer = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const title = titleInput.trim() || 'Expense (Deducted from Safe Buffer)';
-    spendWithBorrowBucket(numericAmount, title, 'savings-sink');
+    const title = titleInput.trim() || 'Batch Purchase (Advanced from upcoming days)';
+    spendBorrowNextAvailable(numericAmount, title);
     handleClose();
   };
 
   const handleClose = () => {
     setAmountInput('');
     setTitleInput('');
+    setSelectedBucketId(dailyBucketId || '');
     onClose();
   };
 
@@ -111,24 +112,71 @@ export const SpendModal: React.FC<SpendModalProps> = ({ visible, onClose }) => {
           {/* Note Input */}
           <TextInput
             style={styles.titleInput}
-            placeholder="What is this for? (e.g. Swiggy, Chai, Books)"
+            placeholder="What is this for? (e.g. Weekly Groceries, Zomato, Chai)"
             placeholderTextColor={colors.textMuted}
             value={titleInput}
             onChangeText={setTitleInput}
           />
 
-          {/* Budget Evaluation States */}
-          {numericAmount > 0 && !isOverspend && (
-            <View style={styles.safeContainer}>
-              <CheckCircle2 size={16} color={colors.primary} />
-              <Text style={styles.safeText}>
-                Within limit! Leaves ₹{(remainingToday - numericAmount).toLocaleString('en-IN')} for today.
+          {/* Funding Bucket */}
+          <Text style={styles.sectionLabel}>Deduct from</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.bucketPicker}
+          >
+            {buckets.map((bucket) => {
+              const isSelected = bucket.id === selectedBucketId;
+              return (
+                <Pressable
+                  key={bucket.id}
+                  style={[
+                    styles.bucketOption,
+                    isSelected && { borderColor: bucket.color, backgroundColor: `${bucket.color}20` },
+                  ]}
+                  onPress={() => setSelectedBucketId(bucket.id)}
+                >
+                  <Text style={[styles.bucketOptionName, isSelected && { color: bucket.color }]}>
+                    {bucket.name}
+                  </Text>
+                  <Text style={styles.bucketOptionBalance}>
+                    ₹{bucket.currentBalance.toLocaleString('en-IN')}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+
+          {!isAllowanceSpend && selectedBucket && (
+            <View style={styles.bucketNotice}>
+              <Shield size={15} color={selectedBucket.color} />
+              <Text style={styles.bucketNoticeText}>
+                This payment comes entirely from {selectedBucket.name}; today’s allowance stays unchanged.
               </Text>
             </View>
           )}
 
-          {/* Overspend Consequence Screen */}
-          {numericAmount > 0 && isOverspend && (
+          {/* State 1: Within Safe Limit */}
+          {numericAmount > 0 && isAllowanceSpend && !isOverspend && (
+            <View style={styles.safeContainer}>
+              <CheckCircle2 size={16} color={colors.primary} />
+              <Text style={styles.safeText}>
+                Within daily limit! Leaves ₹{(remainingToday - numericAmount).toLocaleString('en-IN')} for today.
+              </Text>
+            </View>
+          )}
+
+          {numericAmount > 0 && hasInsufficientBucketBalance && selectedBucket && (
+            <View style={styles.insufficientContainer}>
+              <AlertTriangle size={16} color={colors.danger} />
+              <Text style={styles.insufficientText}>
+                {selectedBucket.name} has only ₹{selectedBucket.currentBalance.toLocaleString('en-IN')}.
+              </Text>
+            </View>
+          )}
+
+          {/* State 2: Over Daily Limit -> Show Choices */}
+          {numericAmount > 0 && isAllowanceSpend && isOverspend && (
             <View style={styles.consequenceBox}>
               <View style={styles.warningHeader}>
                 <AlertTriangle size={18} color={colors.danger} />
@@ -136,52 +184,47 @@ export const SpendModal: React.FC<SpendModalProps> = ({ visible, onClose }) => {
               </View>
 
               <Text style={styles.warningDescription}>
-                You only have ₹{remainingToday} left for today. Choose where to take the remaining ₹{deficit}:
+                You have ₹{remainingToday} left today. Choose how to fund the remaining ₹{deficit}:
               </Text>
 
-              {/* Option A: Borrow from Tomorrow */}
-              <Pressable style={styles.consequenceOption} onPress={handleConfirmBorrowTomorrow}>
-                <View style={styles.optionIconContainer}>
-                  <Calendar size={18} color={colors.warning} />
-                </View>
-                <View style={styles.optionDetails}>
-                  <Text style={styles.optionTitle}>Borrow from Tomorrow</Text>
-                  <Text style={styles.optionSubtext}>
-                    Tomorrow's allowance drops from ₹{todayAllowance} to{' '}
-                    <Text style={{ color: colors.warning, fontWeight: '700' }}>₹{recalibratedDailyAllowance}</Text>
-                  </Text>
-                </View>
-                <ArrowRight size={16} color={colors.textSecondary} />
-              </Pressable>
+              {/* Choice A: Advance from Upcoming Days */}
+              {borrowPreview.canFulfill && (
+                <Pressable style={styles.consequenceOption} onPress={handleConfirmBorrowNextAvailable}>
+                  <View style={styles.optionIconContainer}>
+                    <FastForward size={18} color={colors.warning} />
+                  </View>
+                  <View style={styles.optionDetails}>
+                    <View style={styles.optionHeaderRow}>
+                      <Text style={styles.optionTitle}>Advance from Upcoming Days</Text>
+                      <View style={styles.pillBadge}>
+                        <Text style={styles.pillBadgeText}>+{borrowPreview.daysConsumed} days</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.optionSubtext}>
+                      Consumes today + next {borrowPreview.daysConsumed} day(s) down to ₹0 from upcoming allowance
+                    </Text>
+                  </View>
+                  <ArrowRight size={16} color={colors.textSecondary} />
+                </Pressable>
+              )}
 
-              {/* Option B: Pull from Safe Buffer */}
-              <Pressable
-                style={[styles.consequenceOption, safeBuffer < deficit && styles.optionDisabled]}
-                onPress={safeBuffer >= deficit ? handleConfirmBorrowBuffer : undefined}
-              >
-                <View style={styles.optionIconContainer}>
-                  <Shield size={18} color={colors.accentBlue} />
-                </View>
-                <View style={styles.optionDetails}>
-                  <Text style={styles.optionTitle}>Pull from Safe Buffer</Text>
-                  <Text style={styles.optionSubtext}>
-                    Safe Buffer balance: ₹{safeBuffer.toLocaleString('en-IN')}
-                  </Text>
-                </View>
-                <ArrowRight size={16} color={colors.textSecondary} />
-              </Pressable>
             </View>
           )}
 
           {/* Direct Pay Button (when within limits) */}
-          {(!isOverspend || numericAmount <= 0) && (
+          {(!isOverspend || !isAllowanceSpend || numericAmount <= 0) && (
             <Pressable
-              style={[styles.payButton, numericAmount <= 0 && styles.payButtonDisabled]}
+              style={[
+                styles.payButton,
+                (numericAmount <= 0 || hasInsufficientBucketBalance) && styles.payButtonDisabled,
+              ]}
               onPress={handleConfirmDirect}
-              disabled={numericAmount <= 0}
+              disabled={numericAmount <= 0 || hasInsufficientBucketBalance}
             >
               <Text style={styles.payButtonText}>
-                {numericAmount <= 0 ? 'Enter Amount' : `Pay ₹${numericAmount} via UPI`}
+                {numericAmount <= 0
+                  ? 'Enter Amount'
+                  : `Pay ₹${numericAmount} from ${selectedBucket?.name || 'bucket'}`}
               </Text>
             </Pressable>
           )}
@@ -245,6 +288,53 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.surfaceBorder,
   },
+  sectionLabel: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  bucketPicker: {
+    gap: 8,
+    paddingBottom: 14,
+  },
+  bucketOption: {
+    minWidth: 132,
+    maxWidth: 170,
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: colors.surfaceBorder,
+  },
+  bucketOptionName: {
+    color: colors.textPrimary,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  bucketOptionBalance: {
+    color: colors.textMuted,
+    fontSize: 11,
+    marginTop: 4,
+  },
+  bucketNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.primaryMuted,
+    padding: 10,
+    borderRadius: 10,
+    marginBottom: 14,
+  },
+  bucketNoticeText: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 16,
+    flex: 1,
+  },
   safeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -253,6 +343,21 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 12,
     marginBottom: 20,
+  },
+  insufficientContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.dangerMuted,
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 20,
+  },
+  insufficientText: {
+    color: colors.danger,
+    fontSize: 13,
+    fontWeight: '600',
+    flex: 1,
   },
   safeText: {
     color: colors.primary,
@@ -310,6 +415,22 @@ const styles = StyleSheet.create({
   optionDetails: {
     flex: 1,
   },
+  optionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  pillBadge: {
+    backgroundColor: colors.warningMuted,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  pillBadgeText: {
+    color: colors.warning,
+    fontSize: 10,
+    fontWeight: '700',
+  },
   optionTitle: {
     color: colors.textPrimary,
     fontSize: 14,
@@ -319,6 +440,7 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 12,
     marginTop: 2,
+    lineHeight: 16,
   },
   payButton: {
     backgroundColor: colors.primary,
@@ -337,4 +459,3 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 });
-
