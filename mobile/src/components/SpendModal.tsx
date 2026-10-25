@@ -21,11 +21,11 @@ import * as Haptics from 'expo-haptics';
 
 interface SpendModalProps {
   visible: boolean;
-  initialMode: 'scan' | 'upi';
+  initialMode: 'scan' | 'upi' | 'manual';
   onClose: () => void;
 }
 
-type PaymentMode = 'scan' | 'upi' | 'details';
+type PaymentMode = 'scan' | 'upi' | 'manual' | 'details';
 type PaymentAction = 'direct' | 'borrow';
 
 interface PendingPayment {
@@ -76,16 +76,59 @@ export const SpendModal: React.FC<SpendModalProps> = ({ visible, initialMode, on
   }, [visible, dailyBucketId, buckets]);
 
   const handleConfirmDirect = () => {
-    startPayment('direct');
+    if (paymentMode === 'manual') {
+      recordManualPayment('direct');
+    } else {
+      startPayment('direct');
+    }
   };
 
   const handleConfirmBorrowNextAvailable = () => {
-    startPayment('borrow');
+    if (paymentMode === 'manual') {
+      recordManualPayment('borrow');
+    } else {
+      startPayment('borrow');
+    }
   };
 
   const isPhoneNumber = (value: string) => {
     const normalized = value.replace(/[\s-]/g, '');
     return /^\+?\d{10,13}$/.test(normalized);
+  };
+
+  const recordManualPayment = (action: PaymentAction) => {
+    if (numericAmount <= 0 || !selectedBucketId) {
+      setPaymentError('Enter an amount and select a bucket before recording the payment.');
+      return;
+    }
+    if (!isAllowanceSpend && hasInsufficientBucketBalance) {
+      setPaymentError('The selected bucket does not have enough balance.');
+      return;
+    }
+    if (action === 'borrow' && !borrowPreview.canFulfill) {
+      setPaymentError('Upcoming allowance cannot cover this payment.');
+      return;
+    }
+
+    const title = titleInput.trim() || 'Manual Payment';
+    if (action === 'borrow') {
+      spendBorrowNextAvailable(numericAmount, title);
+    } else {
+      const result = isAllowanceSpend
+        ? spendDirect(numericAmount, title)
+        : spendFromBucket(selectedBucketId, numericAmount, title);
+      if (!result.success) {
+        setPaymentError(
+          'message' in result && result.message
+            ? result.message
+            : 'The payment could not be recorded.'
+        );
+        return;
+      }
+    }
+
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    handleClose();
   };
 
   const startPayment = async (action: PaymentAction) => {
@@ -230,7 +273,13 @@ export const SpendModal: React.FC<SpendModalProps> = ({ visible, initialMode, on
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.headerTitle}>
-              {awaitingConfirmation ? 'Confirm Payment' : paymentMode === 'scan' ? 'Scan & Pay' : 'Pay by UPI ID'}
+              {awaitingConfirmation
+                ? 'Confirm Payment'
+                : paymentMode === 'scan'
+                  ? 'Scan & Pay'
+                  : paymentMode === 'manual'
+                    ? 'Record Payment'
+                    : 'Pay by UPI ID'}
             </Text>
             <Pressable onPress={handleClose} hitSlop={10}>
               <X size={22} color={colors.textSecondary} />
@@ -302,6 +351,11 @@ export const SpendModal: React.FC<SpendModalProps> = ({ visible, initialMode, on
                 Enter the recipient’s UPI ID, then verify the recipient in your payment app before confirming.
               </Text>
             </>
+          )}
+          {paymentMode === 'manual' && (
+            <Text style={styles.manualHint}>
+              Record a payment you already made outside Bachaoo. No payment app will be opened.
+            </Text>
           )}
           {paymentMode === 'details' && (
             <View style={styles.scannedPayee}>
@@ -545,6 +599,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     marginTop: -8,
+    marginBottom: 14,
+  },
+  manualHint: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
     marginBottom: 14,
   },
   scannedPayee: {

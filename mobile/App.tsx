@@ -23,6 +23,7 @@ import { ManageBucketsSection } from './src/components/ManageBucketsSection';
 import {
   QrCode,
   Smartphone,
+  PenLine,
   ShieldCheck,
   Wallet,
   RefreshCw,
@@ -39,7 +40,7 @@ import * as Haptics from 'expo-haptics';
 export default function App() {
   const [activeTab, setActiveTab] = useState<'home' | 'activity' | 'manage' | 'settle'>('home');
   const [spendModalVisible, setSpendModalVisible] = useState(false);
-  const [spendMode, setSpendMode] = useState<'scan' | 'upi'>('scan');
+  const [spendMode, setSpendMode] = useState<'scan' | 'upi' | 'manual'>('scan');
   const [syncModalVisible, setSyncModalVisible] = useState(false);
   const [calendarModalVisible, setCalendarModalVisible] = useState(false);
   const [devModalVisible, setDevModalVisible] = useState(false);
@@ -188,6 +189,16 @@ export default function App() {
             <Text style={styles.secondaryActionBtnText}>Pay by UPI ID</Text>
           </Pressable>
         </View>
+        <Pressable
+          style={styles.manualActionBtn}
+          onPress={() => {
+            setSpendMode('manual');
+            setSpendModalVisible(true);
+          }}
+        >
+          <PenLine size={17} color={colors.primary} />
+          <Text style={styles.manualActionText}>Record payment manually</Text>
+        </Pressable>
 
         {/* TAB 1: HOME (Hero + Quick Actions + Virtual Buckets) */}
         {activeTab === 'home' && (
@@ -552,6 +563,19 @@ const styles = StyleSheet.create({
   secondaryActionBtnText: {
     color: colors.textPrimary,
     fontSize: 15,
+    fontWeight: '600',
+  },
+  manualActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    marginBottom: 8,
+  },
+  manualActionText: {
+    color: colors.primary,
+    fontSize: 14,
     fontWeight: '600',
   },
   devToolsLauncher: {
