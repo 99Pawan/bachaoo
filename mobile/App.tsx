@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  SafeAreaView,
   ScrollView,
   View,
   Text,
@@ -8,6 +7,7 @@ import {
   Pressable,
   StatusBar,
 } from 'react-native';
+import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { colors } from './src/theme/colors';
 import { useBudgetStore } from './src/store/useBudgetStore';
 import { AllowanceHeroCard } from './src/components/AllowanceHeroCard';
@@ -39,6 +39,7 @@ import * as Haptics from 'expo-haptics';
 export default function App() {
   const [activeTab, setActiveTab] = useState<'home' | 'activity' | 'manage' | 'settle'>('home');
   const [spendModalVisible, setSpendModalVisible] = useState(false);
+  const [spendMode, setSpendMode] = useState<'scan' | 'upi'>('scan');
   const [syncModalVisible, setSyncModalVisible] = useState(false);
   const [calendarModalVisible, setCalendarModalVisible] = useState(false);
   const [devModalVisible, setDevModalVisible] = useState(false);
@@ -101,8 +102,9 @@ export default function App() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor={colors.background} />
+    <SafeAreaProvider>
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="light-content" />
 
       <ScrollView ref={scrollRef} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Top Header */}
@@ -166,15 +168,24 @@ export default function App() {
         <View style={styles.actionRow}>
           <Pressable
             style={[styles.primaryActionBtn, styles.scanBtn]}
-            onPress={() => setSpendModalVisible(true)}
+            onPress={() => {
+              setSpendMode('scan');
+              setSpendModalVisible(true);
+            }}
           >
             <QrCode size={18} color="#0B0F19" />
             <Text style={styles.scanBtnText}>Scan & Pay</Text>
           </Pressable>
 
-          <Pressable style={styles.secondaryActionBtn} onPress={() => setSpendModalVisible(true)}>
+          <Pressable
+            style={styles.secondaryActionBtn}
+            onPress={() => {
+              setSpendMode('upi');
+              setSpendModalVisible(true);
+            }}
+          >
             <Smartphone size={18} color={colors.textPrimary} />
-            <Text style={styles.secondaryActionBtnText}>Pay Phone</Text>
+            <Text style={styles.secondaryActionBtnText}>Pay by UPI ID</Text>
           </Pressable>
         </View>
 
@@ -346,7 +357,11 @@ export default function App() {
       </View>
 
       {/* Spend / Payment Modal */}
-      <SpendModal visible={spendModalVisible} onClose={() => setSpendModalVisible(false)} />
+      <SpendModal
+        visible={spendModalVisible}
+        initialMode={spendMode}
+        onClose={() => setSpendModalVisible(false)}
+      />
 
       {/* Sync Balance / Discrepancy Modal */}
       <SyncBalanceModal
@@ -369,7 +384,8 @@ export default function App() {
 
       {/* 60-Second Floating Undo Toast */}
       <UndoToast />
-    </SafeAreaView>
+      </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
 

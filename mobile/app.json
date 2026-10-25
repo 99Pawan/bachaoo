@@ -6,6 +6,15 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Bachaoo to scan UPI QR codes."
+        }
+      ],
+      "expo-status-bar"
+    ],
     "ios": {
       "supportsTablet": true
     },
